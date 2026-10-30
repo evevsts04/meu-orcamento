@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-html lang="pt-BR">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -138,23 +138,21 @@ html lang="pt-BR">
         import { getFirestore, doc, setDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // ==========================================
-        // COLE SUAS CREDENCIAIS DO FIREBASE AQUI
-        // Quando for publicar, preencha os valores abaixo:
+        // CONFIGURAÇÕES DO FIREBASE
         // ==========================================
         const firebaseConfig = {
-          apiKey: "AIzaSyCwRpa65lbcvK6X6YeJDBh4hXXoSUeobio",
+            apiKey: "AIzaSyCwRpa65lbcvK6X6YeJDBh4hXXoSUeobio",
             authDomain: "meu-orcamento-ba61b.firebaseapp.com",
             projectId: "meu-orcamento-ba61b",
-         storageBucket: "meu-orcamento-ba61b.firebasestorage.app",
-         messagingSenderId: "75433033840",
-         appId: "1:75433033840:web:e5c064ce73230980b8b4b5"
-        };
+            storageBucket: "meu-orcamento-ba61b.firebasestorage.app",
+            messagingSenderId: "75433033840",
+            appId: "1:75433033840:web:e5c064ce73230980b8b4b5"
         };
         // ==========================================
 
-        // Lógica para funcionar tanto aqui no ambiente de testes quanto no Vercel
+        // Lógica para funcionar tanto no ambiente de testes quanto no Vercel
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'meu-orcamento-app';
-        const firebaseConfigStr = typeof __firebase_config !== 'undefined' ? __firebase_config : JSON.stringify(myFirebaseConfig);
+        const firebaseConfigStr = typeof __firebase_config !== 'undefined' ? __firebase_config : JSON.stringify(firebaseConfig);
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
         let app, db, auth, userId;
@@ -229,8 +227,8 @@ html lang="pt-BR">
                 return;
             }
             try {
-                const firebaseConfig = typeof firebaseConfigStr === 'string' ? JSON.parse(firebaseConfigStr) : firebaseConfigStr;
-                app = initializeApp(firebaseConfig);
+                const configToUse = typeof firebaseConfigStr === 'string' ? JSON.parse(firebaseConfigStr) : firebaseConfigStr;
+                app = initializeApp(configToUse);
                 auth = getAuth(app);
                 db = getFirestore(app);
 
