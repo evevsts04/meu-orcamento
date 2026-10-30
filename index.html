@@ -242,7 +242,7 @@
                 listenToData();
             } catch (e) {
                 console.error("Firebase init error", e);
-                showToast("Erro ao conectar aos dados.", true);
+                showToast("Erro Firebase: " + e.message, true);
             }
         }
 
@@ -262,6 +262,7 @@
                 }
             }, (error) => {
                 console.error("Firestore error:", error);
+                showToast("Banco de dados bloqueado: Verifique as regras no Firebase.", true);
             });
         }
 
@@ -294,6 +295,9 @@
             if (monthlyData[m]) {
                 state.income = monthlyData[m].income;
                 state.categories = structuredClone(monthlyData[m].categories);
+            } else {
+                // Mantém a estrutura de despesas atuais (incluindo as manuais), mas zera os valores para o novo mês
+                state.categories.forEach(cat => cat.fields.forEach(f => f.value = 0));
             }
             incomeInput.value = state.income;
             renderCategories();
@@ -402,7 +406,12 @@
                     const fieldEl = document.createElement('div');
                     fieldEl.innerHTML = `
                         <div class="flex justify-between items-center mb-1">
-                            <label class="text-sm text-gray-600 font-medium truncate pr-2" title="${field.label}">${field.label}</label>
+                            <label class="text-sm text-gray-600 font-medium truncate pr-2 flex items-center gap-1" title="${field.label}">
+                                <button data-cat="${catIndex}" data-field="${fieldIndex}" class="remove-btn text-gray-400 hover:text-red-500 transition-colors" title="Remover despesa">
+                                    <svg class="w-4 h-4 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                </button>
+                                ${field.label}
+                            </label>
                             <div class="flex items-center text-sm font-semibold" style="color: ${category.color}">
                                 <span>R$</span>
                                 <input type="number" min="0" data-cat="${catIndex}" data-field="${fieldIndex}" value="${field.value}" class="num-input ml-1 w-20 text-right bg-gray-50 border border-gray-200 rounded p-1 focus:outline-none focus:border-[${category.color}]">
@@ -413,12 +422,55 @@
                     fieldsContainer.appendChild(fieldEl);
                 });
 
+                // Novo botão e campo para adicionar despesas personalizadas
+                const addDiv = document.createElement('div');
+                addDiv.className = 'flex gap-2 mt-2 pt-4 border-t border-gray-100';
+                addDiv.innerHTML = `
+                    <input type="text" id="new_desc_${catIndex}" placeholder="Nova despesa..." class="w-full text-sm bg-gray-50 border border-gray-200 rounded p-1.5 focus:outline-none" style="border-color: ${category.color}40">
+                    <button data-cat="${catIndex}" class="add-btn text-white px-3 py-1 rounded text-sm hover:opacity-80 transition-opacity font-medium" style="background-color: ${category.color}">Adicionar</button>
+                `;
+                fieldsContainer.appendChild(addDiv);
+
                 card.appendChild(fieldsContainer);
                 categoriesContainer.appendChild(card);
             });
 
             document.querySelectorAll('.range-input, .num-input').forEach(input => {
                 input.addEventListener('input', handleFieldChange);
+            });
+
+            // Lógica para remover uma despesa
+            document.querySelectorAll('.remove-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const catIdx = e.target.getAttribute('data-cat');
+                    const fieldIdx = e.target.getAttribute('data-field');
+                    state.categories[catIdx].fields.splice(fieldIdx, 1);
+                    window.hasManuallyEdited = true;
+                    renderCategories();
+                    updateTotals();
+                    updateChart();
+                });
+            });
+
+            // Lógica para adicionar uma despesa manualmente
+            document.querySelectorAll('.add-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const catIdx = e.target.getAttribute('data-cat');
+                    const descInput = document.getElementById(`new_desc_${catIdx}`);
+                    const desc = descInput.value.trim();
+                    if (desc) {
+                        state.categories[catIdx].fields.push({
+                            id: 'custom_' + Date.now(),
+                            label: desc,
+                            value: 0,
+                            max: 1000 // Limite padrão do slider para novas despesas
+                        });
+                        window.hasManuallyEdited = true;
+                        renderCategories();
+                        updateTotals();
+                        updateChart();
+                    }
+                });
             });
         }
 
