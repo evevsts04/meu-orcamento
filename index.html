@@ -49,11 +49,35 @@
 </head>
 <body class="text-gray-800 p-4 md:p-8">
 
-    <div class="max-w-4xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden">
-        <!-- Header -->
+    <!-- Tela de Autenticação -->
+    <div id="authContainer" class="max-w-md mx-auto bg-white rounded-2xl shadow-xl overflow-hidden mt-10">
         <div class="bg-slate-800 text-white p-6 text-center">
+            <h2 class="text-2xl font-bold">Acesse seu Orçamento</h2>
+            <p class="text-slate-300 mt-2 text-sm">Entre ou crie sua conta para salvar seus dados</p>
+        </div>
+        <div class="p-6">
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">E-mail</label>
+                <input type="email" id="emailInput" class="w-full bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5" placeholder="seu@email.com">
+            </div>
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Senha</label>
+                <input type="password" id="passwordInput" class="w-full bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5" placeholder="••••••••">
+            </div>
+            <div class="flex flex-col gap-3">
+                <button id="loginBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition-colors">Entrar</button>
+                <button id="registerBtn" class="w-full bg-white border border-blue-600 text-blue-600 hover:bg-blue-50 font-medium py-2.5 rounded-lg transition-colors">Criar Conta</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Container Principal do App (Invisível até o login) -->
+    <div id="appContainer" class="hidden max-w-4xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden">
+        <!-- Header -->
+        <div class="bg-slate-800 text-white p-6 text-center relative">
             <h1 class="text-2xl md:text-3xl font-bold tracking-tight">Raio-X do Orçamento Atual</h1>
             <p class="text-slate-300 mt-2">Simule os cortes e ajustes no seu orçamento</p>
+            <button id="logoutBtn" class="absolute top-4 right-4 text-sm bg-slate-700 hover:bg-slate-600 border border-slate-600 text-white py-1.5 px-4 rounded transition-colors">Sair</button>
         </div>
 
         <!-- Controles de Mês e Salvar -->
@@ -134,7 +158,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // ==========================================
@@ -208,6 +232,15 @@
         const monthSelect = document.getElementById('monthSelect');
         const saveBtn = document.getElementById('saveBtn');
 
+        // Elementos de Auth
+        const authContainer = document.getElementById('authContainer');
+        const appContainer = document.getElementById('appContainer');
+        const emailInput = document.getElementById('emailInput');
+        const passwordInput = document.getElementById('passwordInput');
+        const loginBtn = document.getElementById('loginBtn');
+        const registerBtn = document.getElementById('registerBtn');
+        const logoutBtn = document.getElementById('logoutBtn');
+
         // Formatter
         const formatBRL = (value) => {
             return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -221,6 +254,17 @@
             setTimeout(() => { toast.classList.add('translate-y-20', 'opacity-0'); }, 3000);
         }
 
+        function translateAuthError(code) {
+            switch(code) {
+                case 'auth/invalid-credential': return "Email ou senha incorretos";
+                case 'auth/email-already-in-use': return "Este email já está cadastrado";
+                case 'auth/weak-password': return "A senha deve ter pelo menos 6 caracteres";
+                case 'auth/invalid-email': return "Email inválido";
+                case 'auth/admin-restricted-operation': return "Operação restrita. Verifique as configurações do Firebase.";
+                default: return "Erro ao autenticar. Tente novamente.";
+            }
+        }
+
         async function initFirebase() {
             if (!firebaseConfigStr) {
                 console.log("Rodando localmente. As variáveis do Firebase não foram injetadas no ambiente atual.");
@@ -232,14 +276,66 @@
                 auth = getAuth(app);
                 db = getFirestore(app);
 
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await signInAnonymously(auth);
-                }
+                // Monitora o status de login
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        authContainer.classList.add('hidden');
+                        appContainer.classList.remove('hidden');
+                        listenToData();
+                    } else {
+                        userId = null;
+                        if(window.unsubSnapshot) {
+                            window.unsubSnapshot(); // Para de ouvir o banco se deslogar
+                            window.unsubSnapshot = null;
+                        }
+                        authContainer.classList.remove('hidden');
+                        appContainer.classList.add('hidden');
+                    }
+                });
 
-                userId = auth.currentUser.uid;
-                listenToData();
+                // Lógica do Botão Entrar
+                loginBtn.addEventListener('click', async () => {
+                    const email = emailInput.value.trim();
+                    const password = passwordInput.value.trim();
+                    if(!email || !password) return showToast("Preencha e-mail e senha", true);
+                    
+                    loginBtn.innerHTML = "Entrando...";
+                    try {
+                        await signInWithEmailAndPassword(auth, email, password);
+                        emailInput.value = '';
+                        passwordInput.value = '';
+                    } catch (e) {
+                        showToast(translateAuthError(e.code), true);
+                    } finally {
+                        loginBtn.innerHTML = "Entrar";
+                    }
+                });
+
+                // Lógica do Botão Criar Conta
+                registerBtn.addEventListener('click', async () => {
+                    const email = emailInput.value.trim();
+                    const password = passwordInput.value.trim();
+                    if(!email || !password) return showToast("Preencha e-mail e senha", true);
+                    
+                    registerBtn.innerHTML = "Criando...";
+                    try {
+                        await createUserWithEmailAndPassword(auth, email, password);
+                        showToast("Conta criada com sucesso!");
+                        emailInput.value = '';
+                        passwordInput.value = '';
+                    } catch (e) {
+                        showToast(translateAuthError(e.code), true);
+                    } finally {
+                        registerBtn.innerHTML = "Criar Conta";
+                    }
+                });
+
+                // Lógica do Botão Sair
+                logoutBtn.addEventListener('click', async () => {
+                    await signOut(auth);
+                });
+
             } catch (e) {
                 console.error("Firebase init error", e);
                 showToast("Erro Firebase: " + e.message, true);
@@ -249,7 +345,7 @@
         function listenToData() {
             if (!userId) return;
             const colRef = collection(db, 'artifacts', appId, 'users', userId, 'budget_months');
-            onSnapshot(colRef, (snapshot) => {
+            window.unsubSnapshot = onSnapshot(colRef, (snapshot) => {
                 snapshot.forEach(doc => {
                     const m = parseInt(doc.id);
                     monthlyData[m] = doc.data();
